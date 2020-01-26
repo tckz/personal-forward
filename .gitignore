@@ -1,0 +1,3 @@
+.env
+*.swp
+/app-local.yaml

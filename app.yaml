@@ -1,0 +1,9 @@
+runtime: go112
+
+service: someservicename
+
+main: github.com/tckz/personal-forward/cmd/forwarder
+
+env_variables:
+  ENABLE_SD_PROFILER: "false"
+
