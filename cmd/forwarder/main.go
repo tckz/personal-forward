@@ -143,7 +143,7 @@ func run() {
 	if endPointName == "" {
 		// default EP name under GAE
 		if svcName := os.Getenv("GAE_SERVICE"); svcName != "" {
-			endPointName = svcName + "@" + *projectID
+			endPointName = svcName
 		} else {
 			logger.Panicf("endpoint-name must be specified")
 		}

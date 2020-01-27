@@ -31,13 +31,14 @@ var myName string
 var logger *zap.SugaredLogger
 
 var (
-	optJSONKey      = flag.String("json-key", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "/path/to/servicekey.json")
-	optWorkers      = flag.Int("workers", 8, "Number of groutines to process request")
-	optDump         = flag.Bool("dump", false, "Dump received request or not")
-	optExpire       = flag.Duration("expire", time.Minute*2, "Ignore too old request")
-	optEndPointName = flag.String("endpoint-name", "", "Identity of endpoint")
-	optCleaning     = flag.Bool("with-cleaning", false, "Delete request documents that is expired")
-	optTarget       = flag.String("target", "http://localhost:3010", "")
+	optJSONKey        = flag.String("json-key", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "/path/to/servicekey.json")
+	optWorkers        = flag.Int("workers", 8, "Number of groutines to process request")
+	optDump           = flag.Bool("dump", false, "Dump received request or not")
+	optExpire         = flag.Duration("expire", time.Minute*2, "Ignore too old request")
+	optEndPointName   = flag.String("endpoint-name", "", "Identity of endpoint")
+	optCleaning       = flag.Bool("with-cleaning", false, "Delete request documents that is expired")
+	optTarget         = flag.String("target", "http://localhost:3010", "")
+	optForwardTimeout = flag.Duration("forward-timeout", time.Second*30, "Timeout for forwarding http request")
 )
 
 func init() {
@@ -133,6 +134,7 @@ func run() {
 	if err != nil {
 		logger.Fatalf("*** url.Parse: %v", err)
 	}
+
 	for i := 0; i < *optWorkers; i++ {
 		wg.Add(1)
 		logger := logger.With(zap.Int("worker", i))
@@ -143,7 +145,7 @@ func run() {
 
 			for doc := range ch {
 				func() {
-					ctx, cancel := context.WithTimeout(ctx, time.Second*30)
+					ctx, cancel := context.WithTimeout(ctx, *optForwardTimeout)
 					defer cancel()
 
 					err := consumer.ForwardRequest(ctx, targetURL, doc)

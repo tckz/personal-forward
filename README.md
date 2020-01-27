@@ -1,5 +1,91 @@
+personal-forward
+===
 
+Expose your local web server to the internet.  
 
+Accept https request from the internet and forward it to local web server.
+Its response is returned to the requester.
+
+# Requirements
+
+* Firestore
+* GAE/Go
+* go 1.12
+* GNU make
+* git
+
+# Prerequisite
+
+* GCP: Create GCP project.
+* Firebase: Create Firebase project with GCP project associated.
+* Firebase: Create Cloud Firestore Database.
+
+# Deployment
+
+* GAE: Deploy forwarder application to GAE.
+  ```bash
+  $ cat app-example.yaml
+  runtime: go112
+  service: {default|your service name}
+  main: github.com/tckz/personal-forward/cmd/forwarder
+  $ gcloud app deploy app-example.yaml
+  ```
+  * Caution: First GAE service must be 'default'
+* (Recommended)GAE: Attach firewall rules to GAE app.
+* Build
+  ```bash
+  $ make
+  ```
+* (Optional)Export environment variables if necessary.
+  ```bash
+  $ GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json
+  ```
+* Connect local consumer to the GAE app via Firestore and start forwarding.
+  ```bash
+  $ ./dist/forward-consumer --target http://localhost:3010 --endpoint-name default
+  ```
+
+# Modules
+
+## forwarder
+
+* GAE application.
+* Accept https request from the internet.
+* Create Firestore document represents the accepted request and add it to collection.
+* Receive response from forward-consumer and respond it to original requester.
+
+## forward-consumer
+
+* Listening Firestore collection which represents requests. 
+* Forward http request to local web server and receive its response and write it to the Firestore document.
+
+```
+Usage: forward-consumer [options]
+
+  -dump
+        Dump received request or not
+  -endpoint-name string
+        Identity of endpoint
+  -expire duration
+        Ignore too old request (default 2m0s)
+  -forward-timeout duration
+        Timeout for forwarding http request (default 30s)
+  -json-key string
+        /path/to/servicekey.json
+  -target string
+         (default "http://localhost:3010")
+  -with-cleaning
+        Delete request documents that is expired
+  -workers int
+        Number of groutines to process request (default 8)
+```
+
+# Development
+
+## Firestore document structure
+
+* `@something` indicates collection.
+* `$Id$` indicates ID of the document.
 
 ```json
 {
@@ -36,3 +122,9 @@
   ]
 }
 ```
+
+# License
+
+BSD 2-Clause License
+
+SEE LICENSE
