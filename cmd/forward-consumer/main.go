@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -37,13 +39,16 @@ var (
 	optExpire         = flag.Duration("expire", time.Minute*2, "Ignore too old request")
 	optEndPointName   = flag.String("endpoint-name", "", "Identity of endpoint")
 	optCleaning       = flag.Bool("with-cleaning", false, "Delete request documents that is expired")
-	optTarget         = flag.String("target", "http://localhost:3010", "")
 	optForwardTimeout = flag.Duration("forward-timeout", time.Second*30, "Timeout for forwarding http request")
+	optPatterns       forward.StringArrayFlag
+	optTargets        forward.StringArrayFlag
 )
 
 func init() {
 	godotenv.Load()
 
+	flag.Var(&optPatterns, "pattern", "Path pattern for target.")
+	flag.Var(&optTargets, "target", "URL of forwarding target.")
 	flag.Parse()
 
 	myName = filepath.Base(os.Args[0])
@@ -79,6 +84,30 @@ func run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if len(optTargets) == 0 && len(optPatterns) == 0 {
+		optPatterns = append(optPatterns, "**")
+		optTargets = append(optTargets, "http://localhost:3010")
+	}
+
+	if len(optTargets) != len(optPatterns) {
+		logger.Fatalf("*** Number of patterns and targets must be same.")
+	}
+
+	replaceWildCard := strings.NewReplacer("**", ".*", "*", "[^/]*")
+	var targetPatterns []TargetPattern
+	for i, e := range optPatterns {
+		re := regexp.MustCompile("^" + replaceWildCard.Replace(e))
+		target := optTargets[i]
+		u, err := url.Parse(target)
+		if err != nil {
+			logger.Fatalf("*** url.Parse: %s, err=%v", target, err)
+		}
+		targetPatterns = append(targetPatterns, TargetPattern{
+			Pattern: re,
+			Target:  u,
+		})
+	}
+
 	if *optEndPointName == "" {
 		logger.Fatalf("*** --endpoint-name must be specified")
 	}
@@ -97,7 +126,8 @@ func run() {
 	octrace.ApplyConfig(octrace.Config{DefaultSampler: octrace.AlwaysSample()})
 
 	consumer := &Consumer{
-		Propagation: &propagation.HTTPFormat{},
+		TargetPatterns: targetPatterns,
+		Propagation:    &propagation.HTTPFormat{},
 		Client: &http.Client{
 			Transport: &ochttp.Transport{
 				Propagation:    &propagation.HTTPFormat{},
@@ -126,14 +156,7 @@ func run() {
 		s := <-sigCh
 		logger.Infof("Received signal: %v", s)
 		cancel()
-		logger.Infof("Waiting workers exit")
-		wg.Wait()
 	}()
-
-	targetURL, err := url.Parse(*optTarget)
-	if err != nil {
-		logger.Fatalf("*** url.Parse: %v", err)
-	}
 
 	for i := 0; i < *optWorkers; i++ {
 		wg.Add(1)
@@ -148,7 +171,7 @@ func run() {
 					ctx, cancel := context.WithTimeout(ctx, *optForwardTimeout)
 					defer cancel()
 
-					err := consumer.ForwardRequest(ctx, targetURL, doc)
+					err := consumer.ForwardRequest(ctx, doc)
 					if err != nil {
 						logger.With(zap.Error(err)).Errorf("*** forwardRequest")
 					}
@@ -193,4 +216,7 @@ func run() {
 		}
 	}
 	close(ch)
+
+	logger.Infof("Waiting workers exit")
+	wg.Wait()
 }

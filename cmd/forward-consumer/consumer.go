@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 
 	"cloud.google.com/go/firestore"
 	"github.com/pkg/errors"
@@ -17,11 +18,27 @@ import (
 )
 
 type Consumer struct {
-	Propagation propagation.HTTPFormat
-	Client      *http.Client
+	Propagation    propagation.HTTPFormat
+	Client         *http.Client
+	TargetPatterns []TargetPattern
 }
 
-func (c *Consumer) ForwardRequest(ctx context.Context, target *url.URL, doc *firestore.DocumentSnapshot) (err error) {
+type TargetPattern struct {
+	Pattern *regexp.Regexp
+	Target  *url.URL
+}
+
+func (c *Consumer) ChooseTarget(path string) *url.URL {
+	for _, e := range c.TargetPatterns {
+		if e.Pattern.MatchString(path) {
+			return e.Target
+		}
+	}
+
+	return nil
+}
+
+func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSnapshot) (err error) {
 	defer func() {
 		if err != nil {
 			_, e2 := doc.Ref.Update(ctx, []firestore.Update{
@@ -45,6 +62,16 @@ func (c *Consumer) ForwardRequest(ctx context.Context, target *url.URL, doc *fir
 	header, _ := forward.AsHeader(doc.DataAt("request.header"))
 	body, _ := forward.AsByte(doc.DataAt("request.body"))
 
+	u, err := url.Parse(requestURI)
+	if err != nil {
+		return err
+	}
+
+	target := c.ChooseTarget(u.Path)
+	if target == nil {
+		return errors.New("no target match")
+	}
+
 	var span *trace.Span
 	if cx := header.Get(forward.CloudTraceContext); cx != "" {
 		req, _ := http.NewRequest("GET", "http://localhost/dummy", nil)
@@ -53,11 +80,6 @@ func (c *Consumer) ForwardRequest(ctx context.Context, target *url.URL, doc *fir
 			ctx, span = trace.StartSpanWithRemoteParent(ctx, "ForwardRequest", sc)
 			defer span.End()
 		}
-	}
-
-	u, err := url.Parse(requestURI)
-	if err != nil {
-		return err
 	}
 
 	u.Path = path.Join(target.Path, u.Path)
