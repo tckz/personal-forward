@@ -42,6 +42,7 @@ var (
 	optForwardTimeout  = flag.Duration("forward-timeout", time.Second*30, "Timeout for forwarding http request")
 	optPatterns        forward.StringArrayFlag
 	optTargets         forward.StringArrayFlag
+	optDumpForard      = flag.Bool("dump-forward", false, "Dump forward request and response")
 )
 
 func init() {
@@ -113,6 +114,8 @@ func run() {
 	if *optEndPointName == "" {
 		logger.Fatalf("*** --endpoint-name must be specified")
 	}
+
+	logger = logger.With(zap.String("endpoint", *optEndPointName))
 
 	var opts []option.ClientOption
 	if *optJSONKey != "" {
@@ -198,8 +201,8 @@ func run() {
 		}
 
 		for i, e := range data.Changes {
-			logger.Infof("[%d]: kind=%d, path=%s, old=%d, new=%d",
-				i, e.Kind, e.Doc.Ref.Path, e.OldIndex, e.NewIndex)
+			uri, _ := forward.AsString(e.Doc.DataAt("request.httpInfo.requestURI"))
+			logger.Infof("[%d]: kind=%d, id=%s, uri=%s", i, e.Kind, e.Doc.Ref.ID, uri)
 			if *optDump {
 				fmt.Fprintf(os.Stderr, "%v\n", e.Doc.Data())
 			}

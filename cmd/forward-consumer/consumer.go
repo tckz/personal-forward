@@ -7,9 +7,12 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
+	"os"
 	"path"
 	"regexp"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/pkg/errors"
@@ -94,6 +97,13 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 	req = req.WithContext(ctx)
 	req.Header = header
 
+	if *optDumpForard {
+		if b, err := httputil.DumpRequestOut(req, true); err == nil {
+			fmt.Fprintln(os.Stderr, string(b))
+		}
+	}
+
+	begin := time.Now()
 	res, err := c.Client.Do(req)
 	if err != nil {
 		return err
@@ -103,7 +113,13 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 		res.Body.Close()
 	}()
 
-	logger.Infof("url=%s, status=%d", req.URL.String(), res.StatusCode)
+	logger.Infof("url=%s, status=%d, dur=%s", req.URL.String(), res.StatusCode, time.Since(begin))
+
+	if *optDumpForard {
+		if b, err := httputil.DumpResponse(res, true); err == nil {
+			fmt.Fprintln(os.Stderr, string(b))
+		}
+	}
 
 	b, err := ioutil.ReadAll(res.Body)
 	if err != nil {
