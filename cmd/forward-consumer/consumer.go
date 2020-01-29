@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -69,7 +70,7 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 
 	target := c.ChooseTarget(u.Path)
 	if target == nil {
-		return errors.New("no target match")
+		return fmt.Errorf("no target match for %s", u.Path)
 	}
 
 	var span *trace.Span

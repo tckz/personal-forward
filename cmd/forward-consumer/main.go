@@ -33,15 +33,15 @@ var myName string
 var logger *zap.SugaredLogger
 
 var (
-	optJSONKey        = flag.String("json-key", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "/path/to/servicekey.json")
-	optWorkers        = flag.Int("workers", 8, "Number of groutines to process request")
-	optDump           = flag.Bool("dump", false, "Dump received request or not")
-	optExpire         = flag.Duration("expire", time.Minute*2, "Ignore too old request")
-	optEndPointName   = flag.String("endpoint-name", "", "Identity of endpoint")
-	optCleaning       = flag.Bool("with-cleaning", false, "Delete request documents that is expired")
-	optForwardTimeout = flag.Duration("forward-timeout", time.Second*30, "Timeout for forwarding http request")
-	optPatterns       forward.StringArrayFlag
-	optTargets        forward.StringArrayFlag
+	optJSONKey         = flag.String("json-key", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "/path/to/servicekey.json")
+	optWorkers         = flag.Int("workers", 8, "Number of groutines to process request")
+	optDump            = flag.Bool("dump", false, "Dump received request or not")
+	optExpire          = flag.Duration("expire", time.Minute*2, "Ignore too old request")
+	optEndPointName    = flag.String("endpoint-name", "", "Identity of endpoint")
+	optWithoutCleaning = flag.Bool("without-cleaning", false, "Delete request documents that is expired")
+	optForwardTimeout  = flag.Duration("forward-timeout", time.Second*30, "Timeout for forwarding http request")
+	optPatterns        forward.StringArrayFlag
+	optTargets         forward.StringArrayFlag
 )
 
 func init() {
@@ -108,6 +108,8 @@ func run() {
 		})
 	}
 
+	logger.Infof("Patterns: %v", targetPatterns)
+
 	if *optEndPointName == "" {
 		logger.Fatalf("*** --endpoint-name must be specified")
 	}
@@ -129,6 +131,9 @@ func run() {
 		TargetPatterns: targetPatterns,
 		Propagation:    &propagation.HTTPFormat{},
 		Client: &http.Client{
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 			Transport: &ochttp.Transport{
 				Propagation:    &propagation.HTTPFormat{},
 				NewClientTrace: ochttp.NewSpanAnnotatingClientTrace,
@@ -173,7 +178,7 @@ func run() {
 
 					err := consumer.ForwardRequest(ctx, doc)
 					if err != nil {
-						logger.With(zap.Error(err)).Errorf("*** forwardRequest")
+						logger.With(zap.Error(err)).Errorf("*** forwardRequest: %s", err)
 					}
 				}()
 			}
@@ -201,7 +206,7 @@ func run() {
 
 			created, _ := forward.AsTime(e.Doc.DataAt("created"))
 			if time.Since(created) > *optExpire {
-				if *optCleaning {
+				if !*optWithoutCleaning {
 					_, err := e.Doc.Ref.Delete(ctx)
 					if err != nil {
 						logger.Errorf("*** doc.Delete: %v", err)

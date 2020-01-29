@@ -1,6 +1,8 @@
 package forward
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type StringArrayFlag []string
 
