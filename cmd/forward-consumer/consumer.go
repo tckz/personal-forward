@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,7 @@ type Consumer struct {
 	Propagation    propagation.HTTPFormat
 	Client         *http.Client
 	TargetPatterns []TargetPattern
+	MaxDumpBytes   uint64
 }
 
 type TargetPattern struct {
@@ -35,7 +37,10 @@ type TargetPattern struct {
 
 func (c *Consumer) shouldDumpWithBody(header http.Header) bool {
 	ct := header.Get("content-type")
-	return (strings.HasPrefix(ct, "text/") || strings.Contains(ct, "json"))
+	clText := header.Get("content-length")
+	cl, cle := strconv.ParseUint(clText, 10, 64)
+	return (strings.HasPrefix(ct, "text/") || strings.Contains(ct, "json")) &&
+		(clText != "" && cle == nil && cl <= c.MaxDumpBytes)
 }
 
 func (c *Consumer) chooseTarget(path string) *url.URL {

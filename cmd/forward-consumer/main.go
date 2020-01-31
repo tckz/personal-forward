@@ -45,6 +45,7 @@ var (
 	optTargets         forward.StringArrayFlag
 	optDumpForward     = flag.Bool("dump-forward", false, "Dump forward request and response")
 	optShowVersion     = flag.Bool("version", false, "Show version")
+	optMaxDumpBytes    = flag.Uint("max-dump-bytes", 4096, "Size condition for determine whether dump body of request/response or not.")
 )
 
 func init() {
@@ -150,6 +151,7 @@ func run() {
 				NewClientTrace: ochttp.NewSpanAnnotatingClientTrace,
 			},
 		},
+		MaxDumpBytes: uint64(*optMaxDumpBytes),
 	}
 
 	app, err := firebase.NewApp(ctx, nil, opts...)
