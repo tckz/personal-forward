@@ -31,6 +31,7 @@ import (
 
 var myName string
 var logger *zap.SugaredLogger
+var version string
 
 var (
 	optJSONKey         = flag.String("json-key", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "/path/to/servicekey.json")
@@ -43,6 +44,7 @@ var (
 	optPatterns        forward.StringArrayFlag
 	optTargets         forward.StringArrayFlag
 	optDumpForward     = flag.Bool("dump-forward", false, "Dump forward request and response")
+	optShowVersion     = flag.Bool("version", false, "Show version")
 )
 
 func init() {
@@ -75,6 +77,12 @@ func main() {
 			panic(r)
 		}
 	}()
+
+	if *optShowVersion {
+		fmt.Fprintln(os.Stderr, version)
+		return
+	}
+	logger.Infof("ver=%s, args=%s", version, os.Args)
 	run()
 
 	logger.Info("exit")
