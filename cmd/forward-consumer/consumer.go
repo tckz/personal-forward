@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -32,7 +33,12 @@ type TargetPattern struct {
 	Target  *url.URL
 }
 
-func (c *Consumer) ChooseTarget(path string) *url.URL {
+func (c *Consumer) shouldDumpWithBody(header http.Header) bool {
+	ct := header.Get("content-type")
+	return (strings.HasPrefix(ct, "text/") || strings.Contains(ct, "json"))
+}
+
+func (c *Consumer) chooseTarget(path string) *url.URL {
 	for _, e := range c.TargetPatterns {
 		if e.Pattern.MatchString(path) {
 			return e.Target
@@ -71,7 +77,7 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 		return err
 	}
 
-	target := c.ChooseTarget(u.Path)
+	target := c.chooseTarget(u.Path)
 	if target == nil {
 		return fmt.Errorf("no target match for %s", u.Path)
 	}
@@ -98,7 +104,7 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 	req.Header = header
 
 	if *optDumpForward {
-		if b, err := httputil.DumpRequestOut(req, true); err == nil {
+		if b, err := httputil.DumpRequestOut(req, c.shouldDumpWithBody(req.Header)); err == nil {
 			fmt.Fprintln(os.Stderr, string(b))
 		}
 	}
@@ -116,7 +122,7 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 	logger.Infof("url=%s, status=%d, dur=%s", req.URL.String(), res.StatusCode, time.Since(begin))
 
 	if *optDumpForward {
-		if b, err := httputil.DumpResponse(res, true); err == nil {
+		if b, err := httputil.DumpResponse(res, c.shouldDumpWithBody(res.Header)); err == nil {
 			fmt.Fprintln(os.Stderr, string(b))
 		}
 	}
