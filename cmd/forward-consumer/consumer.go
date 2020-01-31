@@ -97,7 +97,7 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 	req = req.WithContext(ctx)
 	req.Header = header
 
-	if *optDumpForard {
+	if *optDumpForward {
 		if b, err := httputil.DumpRequestOut(req, true); err == nil {
 			fmt.Fprintln(os.Stderr, string(b))
 		}
@@ -115,7 +115,7 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 
 	logger.Infof("url=%s, status=%d, dur=%s", req.URL.String(), res.StatusCode, time.Since(begin))
 
-	if *optDumpForard {
+	if *optDumpForward {
 		if b, err := httputil.DumpResponse(res, true); err == nil {
 			fmt.Fprintln(os.Stderr, string(b))
 		}

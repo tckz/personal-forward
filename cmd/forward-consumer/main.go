@@ -42,7 +42,7 @@ var (
 	optForwardTimeout  = flag.Duration("forward-timeout", time.Second*30, "Timeout for forwarding http request")
 	optPatterns        forward.StringArrayFlag
 	optTargets         forward.StringArrayFlag
-	optDumpForard      = flag.Bool("dump-forward", false, "Dump forward request and response")
+	optDumpForward     = flag.Bool("dump-forward", false, "Dump forward request and response")
 )
 
 func init() {
