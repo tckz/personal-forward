@@ -199,6 +199,8 @@ func run() {
 	logger.Infof("Listening endpoint=%s", *optEndPointName)
 	it := client.Collection("endpoints").Doc(*optEndPointName).Collection("requests").Snapshots(ctx)
 	defer it.Stop()
+
+	const iso8601Format = "2006-01-02T15:04:05.000Z0700"
 	for {
 		data, err := it.Next()
 		if err != nil {
@@ -209,13 +211,13 @@ func run() {
 		}
 
 		for i, e := range data.Changes {
+			created, _ := forward.AsTime(e.Doc.DataAt("created"))
 			uri, _ := forward.AsString(e.Doc.DataAt("request.httpInfo.requestURI"))
-			logger.Infof("[%d]: kind=%d, id=%s, uri=%s", i, e.Kind, e.Doc.Ref.ID, uri)
+			logger.Infof("[%d]: kind=%d, id=%s, created=%s, uri=%s", i, e.Kind, e.Doc.Ref.ID, created.Format(iso8601Format), uri)
 			if *optDump {
 				fmt.Fprintf(os.Stderr, "%v\n", e.Doc.Data())
 			}
 
-			created, _ := forward.AsTime(e.Doc.DataAt("created"))
 			if time.Since(created) > *optExpire {
 				if !*optWithoutCleaning {
 					_, err := e.Doc.Ref.Delete(ctx)
