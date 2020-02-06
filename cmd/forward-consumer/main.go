@@ -18,6 +18,8 @@ import (
 	"cloud.google.com/go/firestore"
 	"contrib.go.opencensus.io/exporter/stackdriver"
 	firebase "firebase.google.com/go"
+	"github.com/alicebob/miniredis"
+	"github.com/go-redis/redis"
 	"github.com/joho/godotenv"
 	forward "github.com/tckz/personal-forward"
 	"go.opencensus.io/exporter/stackdriver/propagation"
@@ -126,6 +128,12 @@ func run() {
 
 	logger = logger.With(zap.String("endpoint", *optEndPointName))
 
+	mr, err := miniredis.Run()
+	if err != nil {
+		logger.Fatalf("*** miniredis.Run: %v", err)
+	}
+	defer mr.Close()
+
 	var opts []option.ClientOption
 	if *optJSONKey != "" {
 		opts = append(opts, option.WithCredentialsFile(*optJSONKey))
@@ -138,6 +146,18 @@ func run() {
 	defer exporter.Flush()
 	octrace.RegisterExporter(exporter)
 	octrace.ApplyConfig(octrace.Config{DefaultSampler: octrace.AlwaysSample()})
+
+	redisClient := redis.NewUniversalClient(&redis.UniversalOptions{
+		Addrs:        []string{mr.Addr()},
+		MaxRetries:   3,
+		DialTimeout:  time.Second * 2,
+		ReadTimeout:  time.Second * 2,
+		WriteTimeout: time.Second * 2,
+		PoolSize:     100,
+		MinIdleConns: 100,
+		PoolTimeout:  time.Second * 3,
+	})
+	defer redisClient.Close()
 
 	consumer := &Consumer{
 		TargetPatterns: targetPatterns,
@@ -199,12 +219,15 @@ func run() {
 	}
 
 	logger.Infof("Listening endpoint=%s", *optEndPointName)
-	it := client.Collection("endpoints").Doc(*optEndPointName).Collection("requests").Snapshots(ctx)
+	it := client.Collection("endpoints").
+		Doc(*optEndPointName).
+		Collection("requests").
+		Snapshots(ctx)
 	defer it.Stop()
 
 	const iso8601Format = "2006-01-02T15:04:05.000Z0700"
 	for {
-		data, err := it.Next()
+		snapshot, err := it.Next()
 		if err != nil {
 			if s, ok := err.(forward.GRPCStatusHolder); err == iterator.Done || ok && s.GRPCStatus().Code() == codes.Canceled {
 				break
@@ -212,16 +235,19 @@ func run() {
 			logger.Fatalf("*** it.Next: %v", err)
 		}
 
-		for i, e := range data.Changes {
+		for i, e := range snapshot.Changes {
 			created, _ := forward.AsTime(e.Doc.DataAt("created"))
 			uri, _ := forward.AsString(e.Doc.DataAt("request.httpInfo.requestURI"))
-			logger.Infof("[%d]: kind=%d, id=%s, created=%s, uri=%s", i, e.Kind, e.Doc.Ref.ID, created.Format(iso8601Format), uri)
+			logger.Infof("[%d]: kind=%d, id=%s, created=%s, uri=%s",
+				i, e.Kind, e.Doc.Ref.ID, created.Format(iso8601Format), uri)
 			if *optDump {
 				fmt.Fprintf(os.Stderr, "%v\n", e.Doc.Data())
 			}
 
+			// Skip the doc that is too old.
 			if time.Since(created) > *optExpire {
 				if !*optWithoutCleaning {
+					// Cleaning too old doc.
 					_, err := e.Doc.Ref.Delete(ctx)
 					if err != nil {
 						logger.Errorf("*** doc.Delete: %v", err)
@@ -231,6 +257,16 @@ func run() {
 			}
 
 			if e.Doc.Exists() && e.Kind == firestore.DocumentAdded {
+				key := fmt.Sprintf("forward-consumer:doc:%s", e.Doc.Ref.ID)
+				set, err := redisClient.SetNX(key, 1, time.Minute*5).Result()
+				if err != nil {
+					logger.Warnf("*** SetNX: key=%s, %v", key, err)
+					// The doc is assumed to be processed.
+				} else if !set {
+					// Ignore the doc that has already processed.
+					continue
+				}
+
 				ch <- e.Doc
 			}
 		}
