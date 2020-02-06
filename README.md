@@ -31,7 +31,7 @@ Its response is returned to the requester.
   $ gcloud app deploy app-example.yaml
   ```
   * Caution: First GAE service must be 'default'
-* (Recommended)GAE: Attach firewall rules to GAE app.
+* (If required)GAE: Attach firewall rules to GAE app.
 * Build
   ```bash
   $ make
@@ -64,6 +64,8 @@ Usage: forward-consumer [options]
 
   -dump
         Dump received request or not
+  -dump-forward
+        Dump forward request and response
   -endpoint-name string
         Identity of endpoint
   -expire duration
@@ -72,9 +74,15 @@ Usage: forward-consumer [options]
         Timeout for forwarding http request (default 30s)
   -json-key string
         /path/to/servicekey.json
-  -target string
-         (default "http://localhost:3010")
-  -with-cleaning
+  -max-dump-bytes uint
+        Size condition for determine whether dump body of request/response or not. (default 4096)
+  -pattern value
+        Path pattern for target.
+  -target value
+        URL of forwarding target.
+  -version
+        Show version
+  -without-cleaning
         Delete request documents that is expired
   -workers int
         Number of groutines to process request (default 8)
