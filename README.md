@@ -32,6 +32,7 @@ Its response is returned to the requester.
   ```
   * Caution: First GAE service must be 'default'
 * (If required)GAE: Attach firewall rules to GAE app.
+* (If required)GAE: Grant user access to the service using Identity-Aware Proxy.
 * Build
   ```bash
   $ make
@@ -95,7 +96,7 @@ Usage: forward-consumer [options]
 * `@something` indicates collection.
 * `$Id$` indicates ID of the document.
 
-```json
+```json5
 {
   "@endpoints": [
     {
@@ -122,8 +123,25 @@ Usage: forward-consumer [options]
               "content-type": ["application/json"],
               "content-length": ["1234"]
             },
+            // Set when responseBodies is exist. Indicates number of docs of responseBodies.
+            "chunks": 2,
             "body": "{some json or other content}"
-          }   
+          },
+          // responseBodies only appears when response size over 1MB.
+          "@responseBodies" : [
+            {
+              "$id$": "e0948a8aQLf38g6AveBaGClx2D0JlyrGYa_Ux-XPQQk",
+              "index": 0,
+              "chunk": "[]byte of chunk",
+              "size": 123456
+            },
+            {
+              "$id$": "e0948a8aQLf38g6AveBaGClx2D0JlyrGYa_Ux-XPQQk",
+              "index": 1,
+              "chunk": "[]byte of chunk",
+              "size": 123456
+            }
+          ]
         }   
       ] 
     } 

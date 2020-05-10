@@ -48,6 +48,7 @@ var (
 	optDumpForward     = flag.Bool("dump-forward", false, "Dump forward request and response")
 	optShowVersion     = flag.Bool("version", false, "Show version")
 	optMaxDumpBytes    = flag.Uint("max-dump-bytes", 4096, "Size condition for determine whether dump body of request/response or not.")
+	optChunkBytes      = flag.Uint("chunk-bytes", 1024*900, "Size of max chunk size of response")
 )
 
 func init() {

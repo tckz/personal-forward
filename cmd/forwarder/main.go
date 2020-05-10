@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	mapset "github.com/deckarep/golang-set"
+
 	"cloud.google.com/go/firestore"
 	"cloud.google.com/go/profiler"
 	"contrib.go.opencensus.io/exporter/stackdriver"
@@ -321,6 +323,7 @@ func run() {
 
 				code, _ := forward.AsInt64(data.DataAt("response.statusCode"))
 				body, _ := forward.AsByte(data.DataAt("response.body"))
+				chunks, _ := forward.AsInt64(data.DataAt("response.chunks"))
 				header, _ := forward.AsHeader(data.DataAt("response.header"))
 				logger.Infof("response: code=%d, header=%v", code, header)
 
@@ -331,7 +334,49 @@ func run() {
 					}
 				}
 				w.WriteHeader(int(code))
-				io.Copy(w, bytes.NewReader(body))
+
+				logger.Infof("response chunks=%d", chunks)
+				if chunks <= 1 {
+					io.Copy(w, bytes.NewReader(body))
+				} else {
+					bodies := map[int64][]byte{}
+					alreadyReceived := mapset.NewSet()
+					func() {
+						it := data.Ref.Collection("responseBodies").Snapshots(ctx)
+						defer it.Stop()
+
+						for int64(alreadyReceived.Cardinality()) != chunks {
+							snapshot, err := it.Next()
+							if err != nil {
+								w.WriteHeader(http.StatusInternalServerError)
+								logger.Errorf("*** it.Next chunks: %v", err)
+								return
+							}
+
+							for _, e := range snapshot.Changes {
+								logger.Infof("arrive: %s, kind=%d", e.Doc.Ref.ID, e.Kind)
+								chunkDoc := e.Doc
+								if chunkDoc.Exists() && e.Kind == firestore.DocumentAdded {
+									chunk, _ := forward.AsByte(chunkDoc.DataAt("chunk"))
+									index, _ := forward.AsInt64(chunkDoc.DataAt("index"))
+
+									logger.Infof("Chunk[%d/%d]: size=%d", index+1, chunks, len(chunk))
+									if !alreadyReceived.Contains(index) {
+										// TODO: don't store if chunk arrived ordered.
+										bodies[index] = chunk
+
+										chunkDoc.Ref.Delete(ctx)
+										alreadyReceived.Add(index)
+									}
+								}
+							}
+						}
+					}()
+
+					for _, b := range bodies {
+						io.Copy(w, bytes.NewReader(b))
+					}
+				}
 
 				_, err = data.Ref.Delete(ctx)
 				if err != nil {

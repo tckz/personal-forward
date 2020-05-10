@@ -134,23 +134,62 @@ func (c *Consumer) ForwardRequest(ctx context.Context, doc *firestore.DocumentSn
 
 	b, err := ioutil.ReadAll(res.Body)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "*** ioutil.ReadAll: response")
 	}
+
+	val := map[string]interface{}{
+		"time":       firestore.ServerTimestamp,
+		"statusCode": res.StatusCode,
+		"header":     res.Header,
+		"chunks":     0,
+	}
+
+	var chunks [][]byte
+	if uint(len(b)) <= *optChunkBytes {
+		val["body"] = b
+	} else {
+		// split body to chunks
+		sliceSize := uint(len(b))
+		chunkSize := *optChunkBytes
+
+		for i := uint(0); i < sliceSize; i += chunkSize {
+			end := i + chunkSize
+			if sliceSize < end {
+				end = sliceSize
+			}
+			chunks = append(chunks, b[i:end])
+		}
+
+		val["chunks"] = len(chunks)
+	}
+
+	logger.Infof("responseSize=%d, chunks=%d", len(b), len(chunks))
 
 	_, err = doc.Ref.Update(ctx, []firestore.Update{
 		{
 			Path:      "response",
 			FieldPath: nil,
-			Value: map[string]interface{}{
-				"time":       firestore.ServerTimestamp,
-				"statusCode": res.StatusCode,
-				"header":     res.Header,
-				"body":       b,
-			},
+			Value:     val,
 		},
 	})
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "*** doc.Ref.Update response: ID=%s", doc.Ref.ID)
+	}
+
+	// append chunks
+	if len(chunks) > 0 {
+		col := doc.Ref.Collection("responseBodies")
+		for i, e := range chunks {
+			ref, _, err := col.Add(ctx, map[string]interface{}{
+				"index": i,
+				"chunk": e,
+				"size":  len(e),
+			})
+			if err != nil {
+				return errors.Wrapf(err, "*** Add chunk of response: index=%d", i)
+			}
+			logger.Infof("Chunk[%d/%d]: Path=%s, size=%d", i+1, len(chunks), ref.Path, len(e))
+		}
 	}
 
 	return nil
