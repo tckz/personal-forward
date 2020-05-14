@@ -37,7 +37,7 @@ var version string
 
 var (
 	optJSONKey         = flag.String("json-key", os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"), "/path/to/servicekey.json")
-	optWorkers         = flag.Int("workers", 8, "Number of groutines to process request")
+	optWorkers         = flag.Int("workers", 8, "Number of goroutines to process request")
 	optDump            = flag.Bool("dump", false, "Dump received request or not")
 	optExpire          = flag.Duration("expire", time.Minute*2, "Ignore too old request")
 	optEndPointName    = flag.String("endpoint-name", "", "Identity of endpoint")
