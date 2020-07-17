@@ -60,7 +60,32 @@ func run() {
 	flag.Parse()
 
 	m := http.NewServeMux()
-	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	m.HandleFunc("/", func(ow http.ResponseWriter, r *http.Request) {
+		w := forward.NewResponseWriterWrapper(ow)
+		begin := time.Now()
+
+		defer func() {
+			logger := logger
+			if r := recover(); r != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				err, ok := r.(error)
+				if !ok {
+					err = fmt.Errorf("panic: %v", r)
+				}
+				logger = logger.With(zap.Error(err), zap.Stack("stack"))
+			}
+
+			dur := time.Since(begin)
+			logger.With(
+				zap.Int("status", w.StatusCode),
+				zap.String("method", r.Method),
+				zap.String("uri", r.RequestURI),
+				zap.String("remote", r.RemoteAddr),
+				zap.Float64("msec", float64(dur)/float64(time.Millisecond)),
+			).
+				Infof("done: %s, %s", dur, r.RequestURI)
+		}()
+
 		b, err := httputil.DumpRequest(r, true)
 		if err != nil {
 			logger.Errorf("*** httputil.DumpRequest: %v", err)
