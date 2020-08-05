@@ -1,5 +1,7 @@
 .PHONY: all clean
 
+export GO111MODULE=on
+
 ifeq ($(GO_CMD),)
 GO_CMD=go
 endif
@@ -17,6 +19,8 @@ TARGETS=\
 	$(DIST_HTTPDUMP) \
 	$(DIST_SAMPLE_PRODUCER)
 
+VERSION := $(shell git describe --always --tags)
+
 all: $(TARGETS)
 	@echo "$@ done."
 
@@ -25,13 +29,13 @@ clean:
 	@echo "$@ done."
 
 $(DIST_HTTPDUMP): cmd/httpdump/*.go $(SRCS_OTHER)
-	GO111MODULE=on $(GO_CMD) build -o $@ -ldflags "-X main.version=`git describe --always --tags`" ./cmd/httpdump/
+	$(GO_CMD) build -o $@ -ldflags "-X main.version=$(VERSION)" ./cmd/httpdump/
 
 $(DIST_FORWARDER): cmd/forwarder/*.go $(SRCS_OTHER)
-	GO111MODULE=on $(GO_CMD) build -o $@ -ldflags "-X main.version=`git describe --always --tags`" ./cmd/forwarder/
+	$(GO_CMD) build -o $@ -ldflags "-X main.version=$(VERSION)" ./cmd/forwarder/
 
 $(DIST_FORWARD_CONSUMER): cmd/forward-consumer/*.go $(SRCS_OTHER)
-	GO111MODULE=on $(GO_CMD) build -o $@ -ldflags "-X main.version=`git describe --always --tags`" ./cmd/forward-consumer/
+	$(GO_CMD) build -o $@ -ldflags "-X main.version=$(VERSION)" ./cmd/forward-consumer/
 
 $(DIST_SAMPLE_PRODUCER): cmd/sample-producer/*.go $(SRCS_OTHER)
-	GO111MODULE=on $(GO_CMD) build -o $@ -ldflags "-X main.version=`git describe --always --tags`" ./cmd/sample-producer/
+	$(GO_CMD) build -o $@ -ldflags "-X main.version=$(VERSION)" ./cmd/sample-producer/

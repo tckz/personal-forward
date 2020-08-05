@@ -22,6 +22,12 @@ var myName string
 var version string
 var logger *zap.SugaredLogger
 
+var (
+	optBind    = flag.String("bind", ":3010", "addr:port")
+	optEcho    = flag.Bool("echo", false, "Echo response body or not")
+	optVersion = flag.Bool("version", false, "Show version")
+)
+
 func init() {
 	godotenv.Load()
 
@@ -35,6 +41,12 @@ func init() {
 }
 
 func main() {
+	flag.Parse()
+	if *optVersion {
+		fmt.Printf("%s\n", version)
+		return
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			var err error
@@ -48,6 +60,8 @@ func main() {
 			panic(r)
 		}
 	}()
+	logger.Infof("args=%#v, ver=%s", os.Args, version)
+
 	run()
 
 	logger.Info("exit")
@@ -55,9 +69,6 @@ func main() {
 }
 
 func run() {
-	bind := flag.String("bind", ":3010", "addr:port")
-	optEcho := flag.Bool("echo", false, "Echo response body or not")
-	flag.Parse()
 
 	m := http.NewServeMux()
 	m.HandleFunc("/", func(ow http.ResponseWriter, r *http.Request) {
@@ -103,7 +114,7 @@ func run() {
 	})
 
 	server := &http.Server{
-		Addr:    *bind,
+		Addr:    *optBind,
 		Handler: m,
 	}
 
